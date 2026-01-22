@@ -1,0 +1,41 @@
+version: '3.9'
+
+services:
+  letsopt-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: letsopt:latest
+    container_name: letsopt-server
+    ports:
+      - "50051:50051"
+    environment:
+      - RUST_LOG=info
+      - GRPC_ADDRESS=0.0.0.0:50051
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "timeout", "5s", "bash", "-c", "</dev/tcp/localhost/50051"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    # Resource limits (adjust as needed)
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Optional: Example client to test the server
+  # Uncomment to run a test client
+  # letsopt-client:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.client
+  #   depends_on:
+  #     - letsopt-server
+  #   environment:
+  #     - SERVER_ADDRESS=letsopt-server:50051

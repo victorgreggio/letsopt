@@ -1,0 +1,32 @@
+[package]
+name = "letsopt"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "letsopt-server"
+path = "src/main.rs"
+
+[[example]]
+name = "client"
+path = "examples/client.rs"
+
+[[example]]
+name = "mip_client"
+path = "examples/mip_client.rs"
+
+[[example]]
+name = "stream_client"
+path = "examples/stream_client.rs"
+
+[dependencies]
+good_lp = { version = "1.14", features = ["coin_cbc"], default-features = false }
+tonic = "0.12"
+prost = "0.13"
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+tokio-stream = "0.1"
+futures = "0.3"
+thiserror = "2.0"
+
+[build-dependencies]
+tonic-build = "0.12"

@@ -1,0 +1,322 @@
+syntax = "proto3";
+
+package lp_solver;
+
+// Linear and Mixed-Integer Programming Solver Service
+// Supports:
+// - Linear Programming (LP): continuous variables
+// - Mixed-Integer Programming (MIP): integer and binary variables
+// 
+// Solves optimization problems of the form:
+// Minimize (or Maximize): c^T * x
+// Subject to: A * x {<=, =, >=} b
+//             x_i ∈ ℝ (continuous), ℤ (integer), or {0,1} (binary)
+service LinearProgrammingSolver {
+  // Solve a linear or mixed-integer programming problem
+  rpc SolveProblem(OptimizationProblem) returns (OptimizationResult);
+  
+  // Solve with streaming for large problems
+  rpc SolveProblemStream(stream ProblemChunk) returns (OptimizationResult);
+  
+  // Get available solver backends
+  rpc GetAvailableSolvers(Empty) returns (AvailableSolvers);
+  
+  // Validate a problem without solving
+  rpc ValidateProblem(OptimizationProblem) returns (ValidationResult);
+}
+
+message Empty {}
+
+// The optimization problem definition
+message OptimizationProblem {
+  // Objective: what to optimize (minimize or maximize)
+  ObjectiveFunction objective = 1;
+  
+  // Constraints: limitations on the variables
+  repeated Constraint constraints = 2;
+  
+  // Variable definitions (type and bounds)
+  repeated Variable variables = 3;
+  
+  // Solver configuration
+  SolverConfig solver_config = 4;
+  
+  // Problem metadata
+  string problem_name = 5;
+  string description = 6;
+}
+
+// Variable definition: type (continuous, integer, binary) and bounds
+message Variable {
+  // Variable type
+  enum VariableType {
+    CONTINUOUS = 0; // Real numbers (x ∈ ℝ)
+    INTEGER = 1; // Integers (x ∈ ℤ)
+    BINARY = 2; // Binary (x ∈ {0, 1})
+  }
+  
+  VariableType type = 1;
+  
+  // Lower bound (default: 0.0 for continuous/integer, 0 for binary)
+  double lower_bound = 2;
+  
+  // Upper bound (default: infinity for continuous/integer, 1 for binary)
+  optional double upper_bound = 3;
+  
+  // Optional: variable name for clarity
+  string name = 4;
+}
+
+// Solver configuration and options
+message SolverConfig {
+  // Solver backend to use
+  enum SolverBackend {
+    AUTO = 0; // Automatically select best solver
+    COIN_CBC = 1; // COIN-OR CBC (MIP solver)
+  }
+  
+  SolverBackend solver = 1;
+  
+  // Time limit in seconds (0 = no limit)
+  double time_limit = 2;
+  
+  // Solution tolerance (how close to optimal)
+  double tolerance = 3;
+  
+  // Maximum number of iterations (0 = no limit)
+  uint64 max_iterations = 4;
+  
+  // Number of threads (0 = auto)
+  uint32 num_threads = 5;
+  
+  // Enable/disable solver output
+  bool verbose = 6;
+  
+  // MIP-specific options
+  MipOptions mip_options = 7;
+  
+  // Presolve level
+  enum PresolveLevel {
+    PRESOLVE_AUTO = 0;
+    PRESOLVE_OFF = 1;
+    PRESOLVE_ON = 2;
+  }
+  
+  PresolveLevel presolve = 8;
+}
+
+// Mixed-Integer Programming specific options
+message MipOptions {
+  // MIP optimality gap tolerance (relative)
+  // Stop when (best_bound - best_solution) / best_solution < gap
+  double gap_tolerance = 1;
+  
+  // Maximum number of branch-and-bound nodes
+  uint64 max_nodes = 2;
+  
+  // Maximum number of solutions to find
+  uint32 max_solutions = 3;
+  
+  // Emphasis
+  enum MipEmphasis {
+    BALANCED = 0; // Balance between optimality and feasibility
+    FEASIBILITY = 1; // Focus on finding feasible solutions quickly
+    OPTIMALITY = 2; // Focus on proving optimality
+    HIDDEN_FEASIBILITY = 3; // Focus on hard-to-find feasible solutions
+  }
+  
+  MipEmphasis emphasis = 4;
+  
+  // Branching strategy
+  enum BranchingStrategy {
+    AUTO_BRANCHING = 0;
+    PSEUDO_COST = 1;
+    STRONG_BRANCHING = 2;
+  }
+  
+  BranchingStrategy branching = 5;
+}
+
+// Objective function: c^T * x (coefficients for each variable)
+message ObjectiveFunction {
+  // Direction of optimization
+  enum OptimizationType {
+    MINIMIZE = 0;
+    MAXIMIZE = 1;
+  }
+  
+  OptimizationType type = 1;
+  
+  // Coefficients for each decision variable
+  // Example: [3.0, 2.0] means 3*x1 + 2*x2
+  repeated double coefficients = 2;
+  
+  // Optional: variable names for clarity
+  repeated string variable_names = 3;
+}
+
+// A linear constraint: sum(coefficient[i] * variable[i]) <= or = or >= bound
+message Constraint {
+  enum ConstraintType {
+    LESS_THAN_OR_EQUAL = 0; // <=
+    EQUAL = 1; // =
+    GREATER_THAN_OR_EQUAL = 2; // >=
+  }
+  
+  // Type of constraint
+  ConstraintType type = 1;
+  
+  // Left-hand side coefficients
+  // Example: [2.0, 1.0] means 2*x1 + 1*x2
+  repeated double coefficients = 2;
+  
+  // Right-hand side bound value
+  double bound = 3;
+  
+  // Optional: constraint name/description
+  string name = 4;
+}
+
+// Bounds on individual variables (deprecated, use Variable message instead)
+message VariableBounds {
+  option deprecated = true;
+  
+  // Variable index (0-based)
+  uint32 variable_index = 1;
+  
+  // Lower bound (default: 0.0 for non-negativity)
+  double lower_bound = 2;
+  
+  // Upper bound (default: infinity)
+  optional double upper_bound = 3;
+}
+
+// For streaming large problems in chunks
+message ProblemChunk {
+  oneof chunk {
+    ObjectiveFunction objective = 1;
+    Constraint constraint = 2;
+    Variable variable = 3;
+    ProblemMetadata metadata = 4;
+    SolverConfig solver_config = 5;
+  }
+}
+
+message ProblemMetadata {
+  string problem_name = 1;
+  string description = 2;
+}
+
+// The solution result
+message OptimizationResult {
+  // Status of the solve
+  SolutionStatus status = 1;
+  
+  // Optimal value of the objective function (if found)
+  optional double optimal_value = 2;
+  
+  // Best bound (for MIP problems)
+  optional double best_bound = 3;
+  
+  // Optimality gap (for MIP: (best_bound - optimal_value) / optimal_value)
+  optional double gap = 4;
+  
+  // Optimal values for each decision variable (if found)
+  repeated double solution_values = 5;
+  
+  // Dual values (shadow prices) for constraints (LP only)
+  repeated double dual_values = 6;
+  
+  // Reduced costs for variables (LP only)
+  repeated double reduced_costs = 7;
+  
+  // Slack/surplus values for each constraint
+  repeated double slack_values = 8;
+  
+  // Human-readable message
+  string message = 9;
+  
+  // Computational statistics
+  SolverStatistics statistics = 10;
+  
+  // Solution quality indicators
+  SolutionQuality quality = 11;
+}
+
+enum SolutionStatus {
+  OPTIMAL = 0; // Found optimal solution
+  FEASIBLE = 1; // Found feasible solution (may not be optimal)
+  INFEASIBLE = 2; // Problem has no feasible solution
+  UNBOUNDED = 3; // Objective can be improved infinitely
+  TIME_LIMIT = 4; // Time limit reached
+  ITERATION_LIMIT = 5; // Iteration limit reached
+  NODE_LIMIT = 6; // Node limit reached (MIP)
+  ERROR = 7; // Solver error occurred
+  INTERRUPTED = 8; // Solve interrupted by user
+}
+
+message SolverStatistics {
+  // Number of simplex iterations (LP)
+  uint64 simplex_iterations = 1;
+  
+  // Number of branch-and-bound nodes explored (MIP)
+  uint64 nodes_explored = 2;
+  
+  // Time taken in milliseconds
+  double solve_time_ms = 3;
+  
+  // Number of variables
+  uint32 num_variables = 4;
+  
+  // Number of constraints
+  uint32 num_constraints = 5;
+  
+  // Number of integer variables
+  uint32 num_integer_vars = 6;
+  
+  // Number of binary variables
+  uint32 num_binary_vars = 7;
+  
+  // Solver backend used
+  string solver_backend = 8;
+}
+
+message SolutionQuality {
+  // Maximum absolute constraint violation
+  double max_constraint_violation = 1;
+  
+  // Maximum relative constraint violation
+  double max_relative_violation = 2;
+  
+  // Maximum integrality violation (MIP)
+  double max_integrality_violation = 3;
+  
+  // Solution reliability score (0-1, 1 = highly reliable)
+  double reliability = 4;
+}
+
+// Available solvers response
+message AvailableSolvers {
+  repeated SolverInfo solvers = 1;
+}
+
+message SolverInfo {
+  string name = 1;
+  string version = 2;
+  bool supports_mip = 3;
+  bool supports_lp = 4;
+  repeated string capabilities = 5;
+}
+
+// Validation result
+message ValidationResult {
+  bool is_valid = 1;
+  repeated string errors = 2;
+  repeated string warnings = 3;
+  
+  // Problem statistics
+  uint32 num_variables = 4;
+  uint32 num_constraints = 5;
+  uint32 num_integer_vars = 6;
+  double estimated_difficulty = 7; // 0-1 scale
+}
