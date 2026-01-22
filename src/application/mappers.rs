@@ -20,12 +20,12 @@ use lp_solver as proto;
 /// Convert protobuf Variable to domain Variable
 pub fn proto_to_domain_variable(
     proto_var: &proto::Variable,
-) -> std::result::Result<Variable, Status> {
+) -> std::result::Result<Variable, Box<Status>> {
     let variable_type = match proto::variable::VariableType::try_from(proto_var.r#type) {
         Ok(proto::variable::VariableType::Continuous) => VariableType::Continuous,
         Ok(proto::variable::VariableType::Integer) => VariableType::Integer,
         Ok(proto::variable::VariableType::Binary) => VariableType::Binary,
-        Err(_) => return Err(Status::invalid_argument("Invalid variable type")),
+        Err(_) => return Err(Box::new(Status::invalid_argument("Invalid variable type"))),
     };
 
     Ok(Variable {
@@ -39,14 +39,18 @@ pub fn proto_to_domain_variable(
 /// Convert protobuf Constraint to domain Constraint
 pub fn proto_to_domain_constraint(
     proto_constr: &proto::Constraint,
-) -> std::result::Result<Constraint, Status> {
+) -> std::result::Result<Constraint, Box<Status>> {
     let constraint_type = match proto::constraint::ConstraintType::try_from(proto_constr.r#type) {
         Ok(proto::constraint::ConstraintType::LessThanOrEqual) => ConstraintType::LessThanOrEqual,
         Ok(proto::constraint::ConstraintType::Equal) => ConstraintType::Equal,
         Ok(proto::constraint::ConstraintType::GreaterThanOrEqual) => {
             ConstraintType::GreaterThanOrEqual
         }
-        Err(_) => return Err(Status::invalid_argument("Invalid constraint type")),
+        Err(_) => {
+            return Err(Box::new(Status::invalid_argument(
+                "Invalid constraint type",
+            )))
+        }
     };
 
     Ok(Constraint {
@@ -60,12 +64,16 @@ pub fn proto_to_domain_constraint(
 /// Convert protobuf ObjectiveFunction to domain ObjectiveFunction
 pub fn proto_to_domain_objective(
     proto_obj: &proto::ObjectiveFunction,
-) -> std::result::Result<ObjectiveFunction, Status> {
+) -> std::result::Result<ObjectiveFunction, Box<Status>> {
     let optimization_type =
         match proto::objective_function::OptimizationType::try_from(proto_obj.r#type) {
             Ok(proto::objective_function::OptimizationType::Minimize) => OptimizationType::Minimize,
             Ok(proto::objective_function::OptimizationType::Maximize) => OptimizationType::Maximize,
-            Err(_) => return Err(Status::invalid_argument("Invalid optimization type")),
+            Err(_) => {
+                return Err(Box::new(Status::invalid_argument(
+                    "Invalid optimization type",
+                )))
+            }
         };
 
     Ok(ObjectiveFunction {
@@ -78,10 +86,10 @@ pub fn proto_to_domain_objective(
 /// Convert protobuf OptimizationProblem to domain OptimizationProblem
 pub fn proto_to_domain_problem(
     proto_prob: proto::OptimizationProblem,
-) -> std::result::Result<OptimizationProblem, Status> {
+) -> std::result::Result<OptimizationProblem, Box<Status>> {
     let objective = proto_prob
         .objective
-        .ok_or_else(|| Status::invalid_argument("Objective is required"))?;
+        .ok_or_else(|| Box::new(Status::invalid_argument("Objective is required")))?;
     let objective = proto_to_domain_objective(&objective)?;
 
     // Create default variables if none provided

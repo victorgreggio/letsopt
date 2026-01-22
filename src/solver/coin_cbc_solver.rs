@@ -49,7 +49,7 @@ impl SolverService for CoinCbcSolver {
         let mut vars = variables!();
         let mut lp_variables: Vec<GoodLpVariable> = Vec::new();
 
-        for (_i, var_def) in problem.variables.iter().enumerate() {
+        for var_def in problem.variables.iter() {
             let lower = var_def.lower_bound;
             let upper = var_def.upper_bound.unwrap_or(f64::INFINITY);
 
@@ -78,7 +78,7 @@ impl SolverService for CoinCbcSolver {
             if coeff != 0.0 {
                 // good_lp minimizes, so negate for maximization
                 let c = if is_maximize { -coeff } else { coeff };
-                obj_expr = obj_expr + c * lp_variables[i];
+                obj_expr += c * lp_variables[i];
             }
         }
 
@@ -89,7 +89,7 @@ impl SolverService for CoinCbcSolver {
             let mut lhs: Expression = 0.into();
             for (i, &coeff) in constraint.coefficients.iter().enumerate() {
                 if coeff != 0.0 {
-                    lhs = lhs + coeff * lp_variables[i];
+                    lhs += coeff * lp_variables[i];
                 }
             }
 

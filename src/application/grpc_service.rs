@@ -37,7 +37,7 @@ impl lp_solver::linear_programming_solver_server::LinearProgrammingSolver for Gr
         }
 
         // Convert protobuf to domain model
-        let domain_problem = mappers::proto_to_domain_problem(proto_problem).map_err(|e| e)?;
+        let domain_problem = mappers::proto_to_domain_problem(proto_problem).map_err(|e| *e)?;
 
         // Create solver based on problem configuration
         let solver = SolverFactory::create_solver(&domain_problem);
@@ -103,7 +103,7 @@ impl lp_solver::linear_programming_solver_server::LinearProgrammingSolver for Gr
         };
 
         // Reuse solve_problem logic
-        let domain_problem = mappers::proto_to_domain_problem(proto_problem).map_err(|e| e)?;
+        let domain_problem = mappers::proto_to_domain_problem(proto_problem).map_err(|e| *e)?;
         let solver = SolverFactory::create_solver(&domain_problem);
         let solution = solver
             .solve(&domain_problem)
@@ -153,7 +153,7 @@ impl lp_solver::linear_programming_solver_server::LinearProgrammingSolver for Gr
         request: Request<lp_solver::OptimizationProblem>,
     ) -> Result<Response<lp_solver::ValidationResult>, Status> {
         let proto_problem = request.into_inner();
-        let domain_problem = mappers::proto_to_domain_problem(proto_problem).map_err(|e| e)?;
+        let domain_problem = mappers::proto_to_domain_problem(proto_problem).map_err(|e| *e)?;
 
         // Use the default solver for validation
         let solver = SolverFactory::default_solver();
