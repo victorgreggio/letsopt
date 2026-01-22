@@ -53,7 +53,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Prompt user to select solver
-    print!("\nSelect solver (1-{}, or 0 for AUTO): ", available_solvers.len());
+    print!(
+        "\nSelect solver (1-{}, or 0 for AUTO): ",
+        available_solvers.len()
+    );
     io::stdout().flush()?;
 
     let mut input = String::new();

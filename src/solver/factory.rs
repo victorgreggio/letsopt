@@ -1,7 +1,5 @@
 use crate::domain::{
-    models::OptimizationProblem,
-    solver_service::SolverService,
-    value_objects::SolverBackend,
+    models::OptimizationProblem, solver_service::SolverService, value_objects::SolverBackend,
 };
 use crate::solver::{CoinCbcSolver, HighsSolver};
 use std::sync::Arc;

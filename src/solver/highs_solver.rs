@@ -55,16 +55,19 @@ impl SolverService for HighsSolver {
         for var_def in &problem.variables {
             let lower = var_def.lower_bound;
             let upper = var_def.upper_bound.unwrap_or(f64::INFINITY);
-            
-            let obj_coeff = problem.objective.coefficients.get(vars.len()).copied().unwrap_or(0.0);
-            
+
+            let obj_coeff = problem
+                .objective
+                .coefficients
+                .get(vars.len())
+                .copied()
+                .unwrap_or(0.0);
+
             let col = match var_def.variable_type {
                 VariableType::Integer | VariableType::Binary => {
                     pb.add_integer_column(obj_coeff, lower..upper)
                 }
-                VariableType::Continuous => {
-                    pb.add_column(obj_coeff, lower..upper)
-                }
+                VariableType::Continuous => pb.add_column(obj_coeff, lower..upper),
             };
             vars.push(col);
         }
@@ -125,7 +128,7 @@ impl SolverService for HighsSolver {
             HighsModelStatus::Optimal => {
                 let solution_data = solved.get_solution();
                 let variable_values = solution_data.columns().to_vec();
-                
+
                 // Calculate objective value
                 let mut actual_obj = 0.0;
                 for (i, &val) in variable_values.iter().enumerate() {
@@ -171,4 +174,3 @@ impl SolverService for HighsSolver {
         true
     }
 }
-

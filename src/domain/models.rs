@@ -1,4 +1,6 @@
-use super::value_objects::{ConstraintType, OptimizationType, SolutionStatus, VariableType, SolverBackend};
+use super::value_objects::{
+    ConstraintType, OptimizationType, SolutionStatus, SolverBackend, VariableType,
+};
 
 /// Decision variable in an optimization problem
 #[derive(Debug, Clone)]

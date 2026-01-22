@@ -45,11 +45,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Available Solvers:");
     for (i, solver) in available_solvers.iter().enumerate() {
         println!("  {}. {} (v{})", i + 1, solver.name, solver.version);
-        println!("     LP: {}  MIP: {}", solver.supports_lp, solver.supports_mip);
+        println!(
+            "     LP: {}  MIP: {}",
+            solver.supports_lp, solver.supports_mip
+        );
     }
 
     // Prompt user to select solver
-    print!("\nSelect solver (1-{}, or 0 for AUTO): ", available_solvers.len());
+    print!(
+        "\nSelect solver (1-{}, or 0 for AUTO): ",
+        available_solvers.len()
+    );
     io::stdout().flush()?;
 
     let mut input = String::new();

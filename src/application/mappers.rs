@@ -5,7 +5,9 @@ use crate::domain::{
     models::{
         Constraint, ObjectiveFunction, OptimizationProblem, Solution, SolverConfig, Variable,
     },
-    value_objects::{ConstraintType, OptimizationType, SolutionStatus, VariableType, SolverBackend},
+    value_objects::{
+        ConstraintType, OptimizationType, SolutionStatus, SolverBackend, VariableType,
+    },
 };
 use tonic::Status;
 
@@ -141,7 +143,10 @@ pub fn proto_to_domain_problem(
 }
 
 /// Convert domain Solution to protobuf OptimizationResult
-pub fn domain_to_proto_solution(solution: Solution, solver_name: &str) -> proto::OptimizationResult {
+pub fn domain_to_proto_solution(
+    solution: Solution,
+    solver_name: &str,
+) -> proto::OptimizationResult {
     let status = match solution.status {
         SolutionStatus::Optimal => proto::SolutionStatus::Optimal as i32,
         SolutionStatus::Feasible => proto::SolutionStatus::Feasible as i32,
