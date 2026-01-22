@@ -1,4 +1,4 @@
-use super::value_objects::{ConstraintType, OptimizationType, SolutionStatus, VariableType};
+use super::value_objects::{ConstraintType, OptimizationType, SolutionStatus, VariableType, SolverBackend};
 
 /// Decision variable in an optimization problem
 #[derive(Debug, Clone)]
@@ -112,6 +112,7 @@ impl Constraint {
 /// Configuration for the solver
 #[derive(Debug, Clone)]
 pub struct SolverConfig {
+    pub backend: SolverBackend,
     pub time_limit: Option<f64>,
     pub gap_tolerance: Option<f64>,
     pub verbose: bool,
@@ -120,6 +121,7 @@ pub struct SolverConfig {
 impl Default for SolverConfig {
     fn default() -> Self {
         Self {
+            backend: SolverBackend::Auto,
             time_limit: None,
             gap_tolerance: None,
             verbose: false,

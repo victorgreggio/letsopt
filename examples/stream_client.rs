@@ -12,6 +12,7 @@
 // - Reduces client memory usage by sending incrementally
 // - Enables dynamic problem generation
 
+use std::io::{self, Write};
 use tonic::Request;
 use futures::stream;
 
@@ -27,7 +28,7 @@ use lp_solver::{
     solver_config::SolverBackend,
     mip_options::MipEmphasis,
     problem_chunk,
-    SolutionStatus,
+    SolutionStatus, Empty,
     Constraint, ObjectiveFunction, Variable, SolverConfig, MipOptions,
     ProblemChunk, ProblemMetadata,
 };
@@ -49,6 +50,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
              NUM_WAREHOUSES * NUM_CUSTOMERS);
     println!("  • {} constraints\n", NUM_CUSTOMERS + NUM_WAREHOUSES);
     
+    // Fetch and display available solvers
+    let solvers_response = client.get_available_solvers(Request::new(Empty {})).await?;
+    let available_solvers = solvers_response.into_inner().solvers;
+
+    println!("Available Solvers:");
+    for (i, solver) in available_solvers.iter().enumerate() {
+        if solver.supports_mip {
+            println!("  {}. {} (v{})", i + 1, solver.name, solver.version);
+        }
+    }
+
+    // Prompt for solver selection
+    print!("\nSelect solver (1-{}, or 0 for AUTO): ", available_solvers.len());
+    io::stdout().flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    let choice: usize = input.trim().parse().unwrap_or(0);
+
+    let solver_backend = match choice {
+        0 => {
+            println!("Using AUTO selection (HiGHS)\n");
+            SolverBackend::Auto
+        }
+        1 => {
+            println!("Using COIN-OR CBC\n");
+            SolverBackend::CoinCbc
+        }
+        2 => {
+            println!("Using HiGHS\n");
+            SolverBackend::Highs
+        }
+        _ => {
+            println!("Invalid choice, using AUTO\n");
+            SolverBackend::Auto
+        }
+    };
+    
     let warehouse_data = generate_warehouse_data();
     let demands = generate_demands();
     let costs = generate_costs();
@@ -59,7 +98,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Shipping W1→C1: $7/unit\n");
     
     println!("Streaming problem in chunks...");
-    let chunks = create_chunks(warehouse_data.clone(), demands.clone(), costs.clone());
+    let chunks = create_chunks(warehouse_data.clone(), demands.clone(), costs.clone(), solver_backend);
     println!("Sending {} chunks...\n", chunks.len());
     
     let response = client
@@ -159,6 +198,7 @@ fn create_chunks(
     wh: Vec<(f64, f64)>,
     dem: Vec<f64>,
     cost: Vec<Vec<f64>>,
+    solver_backend: SolverBackend,
 ) -> Vec<ProblemChunk> {
     let mut chunks = Vec::new();
     
@@ -173,7 +213,7 @@ fn create_chunks(
     // Config
     chunks.push(ProblemChunk {
         chunk: Some(problem_chunk::Chunk::SolverConfig(SolverConfig {
-            solver: SolverBackend::CoinCbc as i32,
+            solver: solver_backend as i32,
             time_limit: 120.0,
             tolerance: 0.0001,
             max_iterations: 0,

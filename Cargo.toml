@@ -6,6 +6,7 @@ edition = "2021"
 [[bin]]
 name = "letsopt-server"
 path = "src/main.rs"
+required-features = ["server"]
 
 [[example]]
 name = "client"
@@ -20,13 +21,21 @@ name = "stream_client"
 path = "examples/stream_client.rs"
 
 [dependencies]
-good_lp = { version = "1.14", features = ["coin_cbc"], default-features = false }
+# gRPC and serialization (required for both server and examples)
 tonic = "0.12"
 prost = "0.13"
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 tokio-stream = "0.1"
 futures = "0.3"
 thiserror = "2.0"
+
+# Solvers (optional, only needed for server)
+good_lp = { version = "1.14", features = ["coin_cbc"], default-features = false, optional = true }
+highs = { version = "1.7", optional = true }
+
+[features]
+default = []
+server = ["good_lp", "highs"]
 
 [build-dependencies]
 tonic-build = "0.12"

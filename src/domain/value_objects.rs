@@ -79,6 +79,8 @@ pub enum SolverBackend {
     Auto,
     /// COIN-OR CBC solver
     CoinCbc,
+    /// HiGHS solver
+    Highs,
 }
 
 impl fmt::Display for SolverBackend {
@@ -86,6 +88,7 @@ impl fmt::Display for SolverBackend {
         match self {
             SolverBackend::Auto => write!(f, "Auto"),
             SolverBackend::CoinCbc => write!(f, "COIN-OR CBC"),
+            SolverBackend::Highs => write!(f, "HiGHS"),
         }
     }
 }

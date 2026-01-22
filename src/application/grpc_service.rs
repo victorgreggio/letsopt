@@ -1,21 +1,28 @@
-use std::sync::Arc;
+#[cfg(feature = "server")]
 use tonic::{Request, Response, Status};
 
+#[cfg(feature = "server")]
 use super::mappers::{self, lp_solver};
-use crate::domain::solver_service::SolverService;
+
+#[cfg(feature = "server")]
+use crate::solver::SolverFactory;
 
 /// gRPC service implementation
-/// Depends on abstraction (SolverService trait) not concrete implementation (DIP)
-pub struct GrpcLpSolverService {
-    solver: Arc<dyn SolverService>,
-}
+pub struct GrpcLpSolverService;
 
 impl GrpcLpSolverService {
-    pub fn new(solver: Arc<dyn SolverService>) -> Self {
-        Self { solver }
+    pub fn new() -> Self {
+        Self
     }
 }
 
+impl Default for GrpcLpSolverService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "server")]
 #[tonic::async_trait]
 impl lp_solver::linear_programming_solver_server::LinearProgrammingSolver for GrpcLpSolverService {
     async fn solve_problem(
@@ -32,16 +39,19 @@ impl lp_solver::linear_programming_solver_server::LinearProgrammingSolver for Gr
         // Convert protobuf to domain model
         let domain_problem = mappers::proto_to_domain_problem(proto_problem).map_err(|e| e)?;
 
+        // Create solver based on problem configuration
+        let solver = SolverFactory::create_solver(&domain_problem);
+        println!("   Using solver: {}", solver.name());
+
         // Solve using domain service
-        let solution = self
-            .solver
+        let solution = solver
             .solve(&domain_problem)
             .map_err(|e| Status::internal(format!("Solver error: {}", e)))?;
 
         println!("✓ Status: {}", solution.status);
 
         // Convert domain solution to protobuf
-        let proto_result = mappers::domain_to_proto_solution(solution);
+        let proto_result = mappers::domain_to_proto_solution(solution, solver.name());
 
         Ok(Response::new(proto_result))
     }
@@ -94,12 +104,12 @@ impl lp_solver::linear_programming_solver_server::LinearProgrammingSolver for Gr
 
         // Reuse solve_problem logic
         let domain_problem = mappers::proto_to_domain_problem(proto_problem).map_err(|e| e)?;
-        let solution = self
-            .solver
+        let solver = SolverFactory::create_solver(&domain_problem);
+        let solution = solver
             .solve(&domain_problem)
             .map_err(|e| Status::internal(format!("Solver error: {}", e)))?;
 
-        let proto_result = mappers::domain_to_proto_solution(solution);
+        let proto_result = mappers::domain_to_proto_solution(solution, solver.name());
         Ok(Response::new(proto_result))
     }
 
@@ -107,18 +117,33 @@ impl lp_solver::linear_programming_solver_server::LinearProgrammingSolver for Gr
         &self,
         _request: Request<lp_solver::Empty>,
     ) -> Result<Response<lp_solver::AvailableSolvers>, Status> {
-        let solvers = vec![lp_solver::SolverInfo {
-            name: self.solver.name().to_string(),
-            version: "2.10+".to_string(),
-            supports_mip: self.solver.supports_mip(),
-            supports_lp: true,
-            capabilities: vec![
-                "Mixed-Integer Programming".to_string(),
-                "Branch and Bound".to_string(),
-                "Cutting Planes".to_string(),
-                "Primal/Dual Simplex".to_string(),
-            ],
-        }];
+        let solvers = vec![
+            lp_solver::SolverInfo {
+                name: "COIN-OR CBC".to_string(),
+                version: "2.10+".to_string(),
+                supports_mip: true,
+                supports_lp: true,
+                capabilities: vec![
+                    "Mixed-Integer Programming".to_string(),
+                    "Branch and Bound".to_string(),
+                    "Cutting Planes".to_string(),
+                    "Primal/Dual Simplex".to_string(),
+                ],
+            },
+            lp_solver::SolverInfo {
+                name: "HiGHS".to_string(),
+                version: "1.7+".to_string(),
+                supports_mip: true,
+                supports_lp: true,
+                capabilities: vec![
+                    "Mixed-Integer Programming".to_string(),
+                    "Linear Programming".to_string(),
+                    "Primal/Dual Simplex".to_string(),
+                    "Interior Point Method".to_string(),
+                    "Presolve".to_string(),
+                ],
+            },
+        ];
 
         Ok(Response::new(lp_solver::AvailableSolvers { solvers }))
     }
@@ -130,11 +155,14 @@ impl lp_solver::linear_programming_solver_server::LinearProgrammingSolver for Gr
         let proto_problem = request.into_inner();
         let domain_problem = mappers::proto_to_domain_problem(proto_problem).map_err(|e| e)?;
 
+        // Use the default solver for validation
+        let solver = SolverFactory::default_solver();
+
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
 
         // Use domain service validation
-        match self.solver.validate(&domain_problem) {
+        match solver.validate(&domain_problem) {
             Ok(_) => {
                 // Additional warnings
                 if domain_problem.constraints.is_empty() {

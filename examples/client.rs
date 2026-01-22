@@ -15,6 +15,7 @@
 //   x1 + x2 <= 40       (storage)
 //   x1, x2 >= 0         (non-negativity)
 
+use std::io::{self, Write};
 use tonic::Request;
 
 pub mod lp_solver {
@@ -23,8 +24,9 @@ pub mod lp_solver {
 
 use lp_solver::{
     constraint::ConstraintType, linear_programming_solver_client::LinearProgrammingSolverClient,
-    objective_function::OptimizationType, variable::VariableType, Constraint, ObjectiveFunction,
-    OptimizationProblem, SolutionStatus, Variable,
+    objective_function::OptimizationType, solver_config::SolverBackend, variable::VariableType,
+    Constraint, Empty, ObjectiveFunction, OptimizationProblem, SolutionStatus, SolverConfig,
+    Variable,
 };
 
 #[tokio::main]
@@ -33,6 +35,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = LinearProgrammingSolverClient::connect("http://127.0.0.1:50051").await?;
 
     println!("=== Production Planning Problem ===\n");
+
+    // Fetch available solvers
+    println!("Fetching available solvers...\n");
+    let solvers_response = client.get_available_solvers(Request::new(Empty {})).await?;
+    let available_solvers = solvers_response.into_inner().solvers;
+
+    // Display available solvers
+    println!("Available Solvers:");
+    for (i, solver) in available_solvers.iter().enumerate() {
+        println!("  {}. {} (v{})", i + 1, solver.name, solver.version);
+        println!("     LP: {}  MIP: {}", solver.supports_lp, solver.supports_mip);
+    }
+
+    // Prompt user to select solver
+    print!("\nSelect solver (1-{}, or 0 for AUTO): ", available_solvers.len());
+    io::stdout().flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    let choice: usize = input.trim().parse().unwrap_or(0);
+
+    let solver_backend = match choice {
+        0 => {
+            println!("Using AUTO selection (HiGHS)\n");
+            SolverBackend::Auto
+        }
+        1 => {
+            println!("Using COIN-OR CBC\n");
+            SolverBackend::CoinCbc
+        }
+        2 => {
+            println!("Using HiGHS\n");
+            SolverBackend::Highs
+        }
+        _ => {
+            println!("Invalid choice, using AUTO\n");
+            SolverBackend::Auto
+        }
+    };
 
     // Define decision variables (continuous, non-negative)
     let variables = vec![
@@ -75,12 +116,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     ];
 
-    // Build the problem
+    // Build the problem with selected solver
     let problem = OptimizationProblem {
         objective: Some(objective),
         constraints,
         variables,
-        solver_config: None, // Use default solver
+        solver_config: Some(SolverConfig {
+            solver: solver_backend as i32,
+            time_limit: 0.0,
+            tolerance: 0.0,
+            max_iterations: 0,
+            num_threads: 0,
+            verbose: false,
+            mip_options: None,
+            presolve: 0,
+        }),
         problem_name: "Factory Production Planning".to_string(),
         description: "Maximize profit from producing chairs and tables".to_string(),
     };
@@ -103,6 +153,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             if let Some(stats) = result.statistics {
                 println!("\nSolver Statistics:");
+                println!("  Solver Used: {}", stats.solver_backend);
                 println!("  Variables:   {}", stats.num_variables);
                 println!("  Constraints: {}", stats.num_constraints);
                 println!("  Solve Time:  {:.2} ms", stats.solve_time_ms);

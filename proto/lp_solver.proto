@@ -73,6 +73,7 @@ message SolverConfig {
   enum SolverBackend {
     AUTO = 0; // Automatically select best solver
     COIN_CBC = 1; // COIN-OR CBC (MIP solver)
+    HIGHS = 2; // HiGHS (LP and MIP solver)
   }
   
   SolverBackend solver = 1;

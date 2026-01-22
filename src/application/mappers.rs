@@ -5,7 +5,7 @@ use crate::domain::{
     models::{
         Constraint, ObjectiveFunction, OptimizationProblem, Solution, SolverConfig, Variable,
     },
-    value_objects::{ConstraintType, OptimizationType, SolutionStatus, VariableType},
+    value_objects::{ConstraintType, OptimizationType, SolutionStatus, VariableType, SolverBackend},
 };
 use tonic::Status;
 
@@ -103,7 +103,15 @@ pub fn proto_to_domain_problem(
         .collect::<std::result::Result<Vec<_>, _>>()?;
 
     let solver_config = if let Some(cfg) = proto_prob.solver_config {
+        let backend = match proto::solver_config::SolverBackend::try_from(cfg.solver) {
+            Ok(proto::solver_config::SolverBackend::Auto) => SolverBackend::Auto,
+            Ok(proto::solver_config::SolverBackend::CoinCbc) => SolverBackend::CoinCbc,
+            Ok(proto::solver_config::SolverBackend::Highs) => SolverBackend::Highs,
+            Err(_) => SolverBackend::Auto,
+        };
+
         SolverConfig {
+            backend,
             time_limit: if cfg.time_limit > 0.0 {
                 Some(cfg.time_limit)
             } else {
@@ -133,7 +141,7 @@ pub fn proto_to_domain_problem(
 }
 
 /// Convert domain Solution to protobuf OptimizationResult
-pub fn domain_to_proto_solution(solution: Solution) -> proto::OptimizationResult {
+pub fn domain_to_proto_solution(solution: Solution, solver_name: &str) -> proto::OptimizationResult {
     let status = match solution.status {
         SolutionStatus::Optimal => proto::SolutionStatus::Optimal as i32,
         SolutionStatus::Feasible => proto::SolutionStatus::Feasible as i32,
@@ -164,7 +172,7 @@ pub fn domain_to_proto_solution(solution: Solution) -> proto::OptimizationResult
             num_constraints: solution.statistics.num_constraints,
             num_integer_vars: solution.statistics.num_integer_vars,
             num_binary_vars: solution.statistics.num_binary_vars,
-            solver_backend: "COIN-OR CBC".to_string(),
+            solver_backend: solver_name.to_string(),
         }),
         quality: Some(proto::SolutionQuality {
             max_constraint_violation: solution.quality.max_constraint_violation,

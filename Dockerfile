@@ -2,7 +2,7 @@
 # Stage 1: Build the Rust application
 FROM rust:1.83-bookworm as builder
 
-# Install build dependencies for COIN-OR CBC
+# Install build dependencies for COIN-OR CBC and HiGHS
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
@@ -14,6 +14,9 @@ RUN apt-get update && apt-get install -y \
     coinor-libcoinutils-dev \
     coinor-libosi-dev \
     coinor-libcgl-dev \
+    clang \
+    libclang-dev \
+    llvm-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app directory
@@ -28,9 +31,9 @@ COPY proto/ ./proto/
 # Copy source code
 COPY src/ ./src/
 
-# Build the application in release mode
-# This will compile COIN-OR CBC from source via good_lp
-RUN cargo build --release --bin letsopt-server
+# Build the application in release mode with both solvers
+# COIN-OR CBC and HiGHS will be compiled from source
+RUN cargo build --release --bin letsopt-server --features server
 
 # Stage 2: Create minimal runtime image
 FROM debian:bookworm-slim

@@ -17,6 +17,7 @@
 // Maximize: 150*x₁ + 90*x₂ + 120*x₃ + 100*x₄ + 80*x₅
 // Subject to: 7*x₁ + 3*x₂ + 4*x₃ + 5*x₄ + 2*x₅ ≤ 15 (weight limit)
 
+use std::io::{self, Write};
 use tonic::Request;
 
 pub mod lp_solver {
@@ -26,7 +27,8 @@ pub mod lp_solver {
 use lp_solver::{
     constraint::ConstraintType, linear_programming_solver_client::LinearProgrammingSolverClient,
     objective_function::OptimizationType, solver_config::SolverBackend, variable::VariableType,
-    Constraint, ObjectiveFunction, OptimizationProblem, SolutionStatus, SolverConfig, Variable,
+    Constraint, Empty, ObjectiveFunction, OptimizationProblem, SolutionStatus, SolverConfig,
+    Variable,
 };
 
 #[tokio::main]
@@ -35,6 +37,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("=== Knapsack Problem (Mixed-Integer Programming) ===\n");
     println!("A hiker has 15 kg capacity. Which items to pack?\n");
+
+    // Fetch available solvers
+    let solvers_response = client.get_available_solvers(Request::new(Empty {})).await?;
+    let available_solvers = solvers_response.into_inner().solvers;
+
+    // Display available solvers with MIP support
+    println!("Available Solvers for MIP:");
+    let mut valid_choices = vec![];
+    for (i, solver) in available_solvers.iter().enumerate() {
+        if solver.supports_mip {
+            valid_choices.push(i + 1);
+            println!("  {}. {} (v{})", i + 1, solver.name, solver.version);
+        }
+    }
+
+    // Prompt user to select solver
+    print!("\nSelect solver (1-{}, or 0 for AUTO): ", available_solvers.len());
+    io::stdout().flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    let choice: usize = input.trim().parse().unwrap_or(0);
+
+    let solver_backend = match choice {
+        0 => {
+            println!("Using AUTO selection (HiGHS)\n");
+            SolverBackend::Auto
+        }
+        1 => {
+            println!("Using COIN-OR CBC\n");
+            SolverBackend::CoinCbc
+        }
+        2 => {
+            println!("Using HiGHS\n");
+            SolverBackend::Highs
+        }
+        _ => {
+            println!("Invalid choice, using AUTO\n");
+            SolverBackend::Auto
+        }
+    };
 
     let items = vec![
         ("Tent", 7.0, 150.0),
@@ -86,9 +129,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         name: "Weight capacity".to_string(),
     }];
 
-    // Use COIN-OR CBC for MIP
+    // Use selected solver
     let solver_config = SolverConfig {
-        solver: SolverBackend::CoinCbc as i32,
+        solver: solver_backend as i32,
         time_limit: 60.0,
         tolerance: 0.0001,
         max_iterations: 0,
@@ -109,7 +152,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Solve
-    println!("Solving with COIN-OR CBC (MIP solver)...\n");
+    println!("Solving with selected solver...\n");
     let response = client.solve_problem(Request::new(problem)).await?;
     let result = response.into_inner();
 

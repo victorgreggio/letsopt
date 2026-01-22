@@ -1,3 +1,7 @@
+// HiGHS Solver Adapter
+// Implements the SolverService interface for HiGHS
+// This is an adapter pattern - translates our domain models to HiGHS API
+
 use crate::domain::{
     models::{OptimizationProblem, Solution as DomainSolution, SolverStatistics},
     solver_service::{Result, SolverError, SolverService},
@@ -5,27 +9,23 @@ use crate::domain::{
         ConstraintType, OptimizationType, SolutionStatus as DomainSolutionStatus, VariableType,
     },
 };
-use good_lp::{
-    solvers::coin_cbc, variable, variables, Expression, ResolutionError,
-    Solution as GoodLpSolutionTrait, SolverModel, Variable as GoodLpVariable,
-};
 use std::time::Instant;
 
-pub struct CoinCbcSolver;
+pub struct HighsSolver;
 
-impl CoinCbcSolver {
+impl HighsSolver {
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Default for CoinCbcSolver {
+impl Default for HighsSolver {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl SolverService for CoinCbcSolver {
+impl SolverService for HighsSolver {
     fn solve(&self, problem: &OptimizationProblem) -> Result<DomainSolution> {
         // Validate first
         self.validate(problem)?;
@@ -45,69 +45,68 @@ impl SolverService for CoinCbcSolver {
             .filter(|v| matches!(v.variable_type, VariableType::Binary))
             .count() as u32;
 
-        // Build variables using good_lp
-        let mut vars = variables!();
-        let mut lp_variables: Vec<GoodLpVariable> = Vec::new();
+        // Use HiGHS RowProblem (add variables first, then constraints)
+        use highs::{HighsModelStatus, RowProblem, Sense};
 
-        for (_i, var_def) in problem.variables.iter().enumerate() {
+        let mut pb = RowProblem::default();
+        let mut vars = Vec::new();
+
+        // Add variables
+        for var_def in &problem.variables {
             let lower = var_def.lower_bound;
             let upper = var_def.upper_bound.unwrap_or(f64::INFINITY);
-
-            let var = match var_def.variable_type {
-                VariableType::Binary | VariableType::Integer => {
-                    vars.add(variable().integer().min(lower).max(upper))
+            
+            let obj_coeff = problem.objective.coefficients.get(vars.len()).copied().unwrap_or(0.0);
+            
+            let col = match var_def.variable_type {
+                VariableType::Integer | VariableType::Binary => {
+                    pb.add_integer_column(obj_coeff, lower..upper)
                 }
-                VariableType::Continuous => vars.add(variable().min(lower).max(upper)),
+                VariableType::Continuous => {
+                    pb.add_column(obj_coeff, lower..upper)
+                }
             };
-            lp_variables.push(var);
+            vars.push(col);
         }
 
         // If no variables specified, create defaults
         if problem.variables.is_empty() {
-            for _ in 0..num_vars {
-                let var = vars.add(variable().min(0.0));
-                lp_variables.push(var);
+            for &coeff in problem.objective.coefficients.iter() {
+                let col = pb.add_column(coeff, 0..);
+                vars.push(col);
             }
         }
 
-        // Build objective expression
-        let is_maximize = problem.objective.optimization_type == OptimizationType::Maximize;
-        let mut obj_expr: Expression = 0.into();
-
-        for (i, &coeff) in problem.objective.coefficients.iter().enumerate() {
-            if coeff != 0.0 {
-                // good_lp minimizes, so negate for maximization
-                let c = if is_maximize { -coeff } else { coeff };
-                obj_expr = obj_expr + c * lp_variables[i];
-            }
-        }
-
-        // Build constraints
-        let mut lp_model = vars.minimise(obj_expr).using(coin_cbc::coin_cbc);
-
+        // Add constraints
         for constraint in &problem.constraints {
-            let mut lhs: Expression = 0.into();
+            let mut terms = Vec::new();
             for (i, &coeff) in constraint.coefficients.iter().enumerate() {
-                if coeff != 0.0 {
-                    lhs = lhs + coeff * lp_variables[i];
+                if coeff != 0.0 && i < vars.len() {
+                    terms.push((vars[i], coeff));
                 }
             }
 
             match constraint.constraint_type {
                 ConstraintType::LessThanOrEqual => {
-                    lp_model = lp_model.with(lhs.leq(constraint.bound));
+                    pb.add_row(..=constraint.bound, &terms);
                 }
                 ConstraintType::Equal => {
-                    lp_model = lp_model.with(lhs.eq(constraint.bound));
+                    pb.add_row(constraint.bound..=constraint.bound, &terms);
                 }
                 ConstraintType::GreaterThanOrEqual => {
-                    lp_model = lp_model.with(lhs.geq(constraint.bound));
+                    pb.add_row(constraint.bound.., &terms);
                 }
             }
         }
 
         // Solve the problem
-        let solution_result = lp_model.solve();
+        let sense = if problem.objective.optimization_type == OptimizationType::Maximize {
+            Sense::Maximise
+        } else {
+            Sense::Minimise
+        };
+
+        let solved = pb.optimise(sense).solve();
         let solve_time = start_time.elapsed().as_secs_f64() * 1000.0;
 
         // Build statistics
@@ -122,18 +121,17 @@ impl SolverService for CoinCbcSolver {
         };
 
         // Process result
-        match solution_result {
-            Ok(sol) => {
-                // Extract variable values
-                let mut variable_values = vec![0.0; num_vars];
-                for (i, &var) in lp_variables.iter().enumerate() {
-                    variable_values[i] = sol.value(var);
-                }
-
-                // Calculate actual objective value
+        match solved.status() {
+            HighsModelStatus::Optimal => {
+                let solution_data = solved.get_solution();
+                let variable_values = solution_data.columns().to_vec();
+                
+                // Calculate objective value
                 let mut actual_obj = 0.0;
-                for (i, &coeff) in problem.objective.coefficients.iter().enumerate() {
-                    actual_obj += coeff * variable_values[i];
+                for (i, &val) in variable_values.iter().enumerate() {
+                    if let Some(&coeff) = problem.objective.coefficients.get(i) {
+                        actual_obj += coeff * val;
+                    }
                 }
 
                 let mut solution = DomainSolution::optimal(actual_obj, variable_values);
@@ -142,7 +140,7 @@ impl SolverService for CoinCbcSolver {
 
                 Ok(solution)
             }
-            Err(ResolutionError::Infeasible) => {
+            HighsModelStatus::Infeasible => {
                 let mut solution = DomainSolution::new(
                     DomainSolutionStatus::Infeasible,
                     "Problem is infeasible: no solution satisfies all constraints",
@@ -150,7 +148,7 @@ impl SolverService for CoinCbcSolver {
                 solution.statistics = statistics;
                 Ok(solution)
             }
-            Err(ResolutionError::Unbounded) => {
+            HighsModelStatus::Unbounded | HighsModelStatus::UnboundedOrInfeasible => {
                 let mut solution = DomainSolution::new(
                     DomainSolutionStatus::Unbounded,
                     "Problem is unbounded: objective can be improved infinitely",
@@ -158,15 +156,19 @@ impl SolverService for CoinCbcSolver {
                 solution.statistics = statistics;
                 Ok(solution)
             }
-            Err(e) => Err(SolverError::ExecutionFailed(format!("{:?}", e))),
+            status => Err(SolverError::ExecutionFailed(format!(
+                "HiGHS solver returned status: {:?}",
+                status
+            ))),
         }
     }
 
     fn name(&self) -> &str {
-        "COIN-OR CBC"
+        "HiGHS"
     }
 
     fn supports_mip(&self) -> bool {
         true
     }
 }
+
