@@ -33,7 +33,7 @@ COPY src/ ./src/
 
 # Build the application in release mode with both solvers
 # COIN-OR CBC and HiGHS will be compiled from source
-RUN cargo build --release --bin letsopt-server --features server
+RUN cargo build --release --bin letsopt-server
 
 # Stage 2: Create minimal runtime image
 FROM debian:bookworm-slim
