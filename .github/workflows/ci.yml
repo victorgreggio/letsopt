@@ -47,25 +47,19 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y coinor-libcbc-dev protobuf-compiler
+        sudo apt-get install -y libclang-dev coinor-libcbc-dev protobuf-compiler
     
-    - name: Build (default features)
+    - name: Build
       run: cargo build --verbose
     
-    - name: Build (all features)
-      run: cargo build --all-features --verbose
-    
-    - name: Run tests (default features)
+    - name: Run tests
       run: cargo test --verbose
-    
-    - name: Run tests (all features)
-      run: cargo test --all-features --verbose
     
     - name: Check formatting
       run: cargo fmt -- --check
     
     - name: Run clippy
-      run: cargo clippy --all-features -- -D warnings
+      run: cargo clippy -- -D warnings
 
   build-examples:
     name: Build Examples
@@ -86,7 +80,7 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y protobuf-compiler
+        sudo apt-get install -y libclang-dev protobuf-compiler
     
     - name: Build examples
       run: cargo build --examples --verbose

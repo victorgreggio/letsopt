@@ -5,11 +5,9 @@ pub mod domain;
 pub mod application;
 
 // Infrastructure layer: External concerns (gRPC, server)
-#[cfg(feature = "server")]
 pub mod infrastructure;
 
 // Solver adapters: Concrete implementations of SolverService
-#[cfg(feature = "server")]
 pub mod solver;
 
 // Re-export commonly used types
@@ -20,8 +18,6 @@ pub use domain::{
 
 pub use application::GrpcLpSolverService;
 
-#[cfg(feature = "server")]
 pub use infrastructure::{start_server, ServerConfig};
 
-#[cfg(feature = "server")]
 pub use solver::{CoinCbcSolver, HighsSolver, SolverFactory};

@@ -1,10 +1,7 @@
-#[cfg(feature = "server")]
 use tonic::{Request, Response, Status};
 
-#[cfg(feature = "server")]
 use super::mappers::{self, lp_solver};
 
-#[cfg(feature = "server")]
 use crate::solver::SolverFactory;
 
 /// gRPC service implementation
@@ -22,7 +19,6 @@ impl Default for GrpcLpSolverService {
     }
 }
 
-#[cfg(feature = "server")]
 #[tonic::async_trait]
 impl lp_solver::linear_programming_solver_server::LinearProgrammingSolver for GrpcLpSolverService {
     async fn solve_problem(

@@ -6,7 +6,6 @@ edition = "2021"
 [[bin]]
 name = "letsopt-server"
 path = "src/main.rs"
-required-features = ["server"]
 
 [[example]]
 name = "client"
@@ -29,13 +28,11 @@ tokio-stream = "0.1"
 futures = "0.3"
 thiserror = "2.0"
 
-# Solvers (optional, only needed for server)
-good_lp = { version = "1.14", features = ["coin_cbc"], default-features = false, optional = true }
-highs = { version = "1.7", optional = true }
+# Solvers
+good_lp = { version = "1.14", features = ["coin_cbc"], default-features = false }
+highs = { version = "1.7" }
 
-[features]
-default = []
-server = ["good_lp", "highs"]
+
 
 [build-dependencies]
 tonic-build = "0.12"
